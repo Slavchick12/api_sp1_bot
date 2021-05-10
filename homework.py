@@ -1,7 +1,6 @@
 import os
 import time
 import logging
-from logging.handlers import RotatingFileHandler
 
 import requests
 import telegram
@@ -17,45 +16,24 @@ HEADERS = {"Authorization": f"OAuth {PRAKTIKUM_TOKEN}"}
 PRAKTIKUM_API = (
     "https://praktikum.yandex.ru/api/user_api/homework_statuses/"
 )
-statuses = {
+VERDICTS = {
     'reviewing': 'Работа взята в ревью.',
     'rejected': 'К сожалению в работе нашлись ошибки.',
-    'approved': ('Ревьюеру всё понравилось, '
-                 'можно приступать к следующему уроку.'),
+    'approved': 'Ревьюеру всё понравилось, '
+                'можно приступать к следующему уроку.',
 }
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    filename='program.log',
-    format='%(asctime)s, %(levelname)s, %(message)s, %(name)s'
-)
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = RotatingFileHandler(
-    'my_logger.log',
-    maxBytes=50000000,
-    backupCount=5
-)
-logger.addHandler(handler)
-
-
-class StatusError(Exception):
-    pass
+CHECKED_WORK = 'У вас проверили работу "{name}"!\n\n{verdict}'
+CONNECTION_ERROR = 'Не удалось получить статус: {response}'
+SERVER_ERROR = 'Отказ сервера {value}: {response}'
 
 
 def parse_homework_status(homework):
     name = homework['homework_name']
-    CHECKED_WORK = 'У вас проверили работу "{name}"!\n\n{verdict}'
-    for status in statuses:
-        if homework['status'] == status:
-            verdict = statuses[status]
-            return CHECKED_WORK.format(verdict=verdict, name=name)
-    raise StatusError('Неожиданный статус')
-
-
-class ResponseError(Exception):
-    pass
+    status = homework['status']
+    if status not in VERDICTS:
+        raise ValueError(f'Неожиданный статус {status}')
+    verdict = VERDICTS[status]
+    return CHECKED_WORK.format(verdict=verdict, name=name)
 
 
 class ServerError(Exception):
@@ -70,14 +48,21 @@ def get_homework_statuses(current_timestamp):
             params=data,
             headers=HEADERS
         )
-    except Exception:
-        raise ResponseError('Не удалось получить статус')
-    response_dict = response.json()
+    except ConnectionError:
+        raise ConnectionError(
+            CONNECTION_ERROR.format(response=response.text)
+        )
+    json_response = response.json()
     error_keys = ['error', 'code']
     for key in error_keys:
-        if key in response_dict:
-            raise ServerError('Отказ сервера')
-    return response_dict
+        if key in json_response:
+            raise ServerError(
+                SERVER_ERROR.format(
+                    value=json_response[key],
+                    response=response.text
+                )
+            )
+    return json_response
 
 
 def send_message(message, bot_client):
@@ -107,4 +92,9 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        level=logging.DEBUG,
+        filename=__file__ + '_program.log',
+        format='%(asctime)s, %(levelname)s, %(message)s, %(name)s'
+    )
     main()
