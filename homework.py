@@ -23,17 +23,22 @@ VERDICTS = {
                 'можно приступать к следующему уроку.',
 }
 CHECKED_WORK = 'У вас проверили работу "{name}"!\n\n{verdict}'
-CONNECTION_ERROR = 'Не удалось получить статус: {response}'
-SERVER_ERROR = 'Отказ сервера {value}: {response}'
+CONNECTION_ERROR = ('{error}: не удалось получить '
+                    'статус: {API}, {params}, {headers}')
+SERVER_ERROR = 'Отказ сервера {value}: {API}, {params}, {headers}'
+UNEXPECTED_STATUS = 'Неожиданный статус {status}'
+BOT_START = 'Момент запуска бота'
+BOT_ERROR = 'Бот столкнулся с ошибкой: {error}'
 
 
 def parse_homework_status(homework):
-    name = homework['homework_name']
     status = homework['status']
     if status not in VERDICTS:
-        raise ValueError(f'Неожиданный статус {status}')
-    verdict = VERDICTS[status]
-    return CHECKED_WORK.format(verdict=verdict, name=name)
+        raise ValueError(UNEXPECTED_STATUS.format(status=status))
+    return CHECKED_WORK.format(
+        verdict=VERDICTS[status],
+        name=homework['homework_name']
+    )
 
 
 class ServerError(Exception):
@@ -48,18 +53,24 @@ def get_homework_statuses(current_timestamp):
             params=data,
             headers=HEADERS
         )
-    except ConnectionError:
+    except requests.exceptions.ConnectionError as error:
         raise ConnectionError(
-            CONNECTION_ERROR.format(response=response.text)
+            CONNECTION_ERROR.format(
+                error=error,
+                API=PRAKTIKUM_API,
+                params=data,
+                headers=HEADERS
+            )
         )
     json_response = response.json()
-    error_keys = ['error', 'code']
-    for key in error_keys:
+    for key in ['error', 'code']:
         if key in json_response:
             raise ServerError(
                 SERVER_ERROR.format(
                     value=json_response[key],
-                    response=response.text
+                    API=PRAKTIKUM_API,
+                    params=data,
+                    headers=HEADERS
                 )
             )
     return json_response
@@ -71,7 +82,7 @@ def send_message(message, bot_client):
 
 def main():
     # проинициализировать бота здесь
-    logging.debug('Момент запуска бота')
+    logging.debug(BOT_START)
     current_timestamp = int(time.time())  # начальное значение timestamp
 
     while True:
@@ -87,14 +98,14 @@ def main():
             )  # обновить timestamp
             time.sleep(300)  # опрашивать раз в пять минут
         except Exception as error:
-            logging.error(f'Бот столкнулся с ошибкой: {error}', exc_info=True)
+            logging.error(BOT_ERROR.format(error=error), exc_info=True)
             time.sleep(20)
 
 
 if __name__ == '__main__':
     logging.basicConfig(
         level=logging.DEBUG,
-        filename=__file__ + '_program.log',
+        filename=__file__ + '.log',
         format='%(asctime)s, %(levelname)s, %(message)s, %(name)s'
     )
     main()
