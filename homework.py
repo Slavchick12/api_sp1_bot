@@ -24,8 +24,8 @@ VERDICTS = {
 }
 CHECKED_WORK = 'У вас проверили работу "{name}"!\n\n{verdict}'
 CONNECTION_ERROR = ('{error}: не удалось получить '
-                    'статус: {API}, {params}, {headers}')
-SERVER_ERROR = 'Отказ сервера {value}: {API}, {params}, {headers}'
+                    'статус: {api}, {params}, {headers}')
+SERVER_ERROR = 'Отказ сервера {value}: {api}, {params}, {headers}'
 UNEXPECTED_STATUS = 'Неожиданный статус {status}'
 BOT_START = 'Момент запуска бота'
 BOT_ERROR = 'Бот столкнулся с ошибкой: {error}'
@@ -47,20 +47,12 @@ class ServerError(Exception):
 
 def get_homework_statuses(current_timestamp):
     data = {"from_date": current_timestamp}
+    request_details = dict(url=PRAKTIKUM_API, params=data, headers=HEADERS)
     try:
-        response = requests.get(
-            PRAKTIKUM_API,
-            params=data,
-            headers=HEADERS
-        )
-    except requests.exceptions.ConnectionError as error:
+        response = requests.get(**request_details)
+    except requests.RequestException as error:
         raise ConnectionError(
-            CONNECTION_ERROR.format(
-                error=error,
-                API=PRAKTIKUM_API,
-                params=data,
-                headers=HEADERS
-            )
+            CONNECTION_ERROR.format(error=error, **request_details)
         )
     json_response = response.json()
     for key in ['error', 'code']:
@@ -68,9 +60,7 @@ def get_homework_statuses(current_timestamp):
             raise ServerError(
                 SERVER_ERROR.format(
                     value=json_response[key],
-                    API=PRAKTIKUM_API,
-                    params=data,
-                    headers=HEADERS
+                    **request_details
                 )
             )
     return json_response
@@ -106,6 +96,6 @@ if __name__ == '__main__':
     logging.basicConfig(
         level=logging.DEBUG,
         filename=__file__ + '.log',
-        format='%(asctime)s, %(levelname)s, %(message)s, %(name)s'
+        format='%(asctime)s, %(levelname)s, %(name)s, %(message)s'
     )
     main()
