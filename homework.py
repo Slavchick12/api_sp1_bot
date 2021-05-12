@@ -24,8 +24,8 @@ VERDICTS = {
 }
 CHECKED_WORK = 'У вас проверили работу "{name}"!\n\n{verdict}'
 CONNECTION_ERROR = ('{error}: не удалось получить '
-                    'статус: {api}, {params}, {headers}')
-SERVER_ERROR = 'Отказ сервера {value}: {api}, {params}, {headers}'
+                    'статус: {url}, {params}, {headers}')
+SERVER_ERROR = 'Отказ сервера {value}: {url}, {params}, {headers}'
 UNEXPECTED_STATUS = 'Неожиданный статус {status}'
 BOT_START = 'Момент запуска бота'
 BOT_ERROR = 'Бот столкнулся с ошибкой: {error}'
@@ -50,6 +50,7 @@ def get_homework_statuses(current_timestamp):
     request_details = dict(url=PRAKTIKUM_API, params=data, headers=HEADERS)
     try:
         response = requests.get(**request_details)
+        logging.debug(response.json().get("homeworks"))
     except requests.RequestException as error:
         raise ConnectionError(
             CONNECTION_ERROR.format(error=error, **request_details)
@@ -79,8 +80,9 @@ def main():
         try:
             new_homework = get_homework_statuses(current_timestamp)
             if new_homework.get('homeworks'):
-                bot_client.send_message(
-                    parse_homework_status(new_homework.get('homeworks')[0])
+                send_message(
+                    parse_homework_status(new_homework.get('homeworks')[0]),
+                    bot_client
                 )
             current_timestamp = new_homework.get(
                 'current_date',
